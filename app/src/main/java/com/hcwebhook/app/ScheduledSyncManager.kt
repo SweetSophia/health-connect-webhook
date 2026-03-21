@@ -69,6 +69,7 @@ class ScheduledSyncManager(private val context: Context) {
         val intent = Intent(context, ScheduledSyncReceiver::class.java).apply {
             action = ACTION_SCHEDULED_SYNC
             putExtra(EXTRA_SCHEDULE_ID, schedule.id)
+            setPackage(context.packageName)
         }
         val pendingIntent = buildAlarmPendingIntent(intent, schedule.id.hashCode())
         

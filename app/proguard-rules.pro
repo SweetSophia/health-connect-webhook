@@ -19,3 +19,20 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Keep Kotlinx Serialization data classes used for JSON serialization.
+# Without these rules, ProGuard/R8 may obfuscate field names and break
+# JSON encoding/decoding at runtime.
+-keepattributes *Annotation*, InnerClasses
+-dontnote kotlinx.serialization.AnnotationsKt
+
+-keepclassmembers @kotlinx.serialization.Serializable class com.hcwebhook.app.** {
+    *** Companion;
+    *** INSTANCE;
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
+-if @kotlinx.serialization.Serializable class com.hcwebhook.app.**
+-keepclassmembers class com.hcwebhook.app.<1>$Companion {
+    kotlinx.serialization.KSerializer serializer(...);
+}

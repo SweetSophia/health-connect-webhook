@@ -24,6 +24,11 @@ class ScheduledSyncReceiver : BroadcastReceiver() {
         
         when (intent.action) {
             ScheduledSyncManager.ACTION_SCHEDULED_SYNC -> {
+                // Validate that the intent originates from our own app
+                if (intent.`package` != null && intent.`package` != context.packageName) {
+                    Log.w(TAG, "Ignoring scheduled sync intent from external package")
+                    return
+                }
                 // Trigger sync asynchronously
                 val scheduleId = intent.getStringExtra(ScheduledSyncManager.EXTRA_SCHEDULE_ID)
                 Log.d(TAG, "Triggering scheduled sync for schedule: $scheduleId")

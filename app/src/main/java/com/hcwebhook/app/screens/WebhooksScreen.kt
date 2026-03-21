@@ -15,6 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.hcwebhook.app.*
+import java.net.MalformedURLException
+import java.net.URL
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -184,11 +186,12 @@ fun WebhooksScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
                         onClick = {
-                            if (newUrl.isNotBlank() && (newUrl.startsWith("http://") || newUrl.startsWith("https://"))) {
-                                webhookConfigs = webhookConfigs + WebhookConfig.fromUrl(newUrl)
+                            val trimmedUrl = newUrl.trim()
+                            if (trimmedUrl.isNotBlank() && isValidWebhookUrl(trimmedUrl)) {
+                                webhookConfigs = webhookConfigs + WebhookConfig.fromUrl(trimmedUrl)
                                 newUrl = ""
                             } else {
-                                Toast.makeText(context, "Please enter a valid HTTP/HTTPS URL", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Please enter a valid HTTPS webhook URL", Toast.LENGTH_SHORT).show()
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -260,10 +263,14 @@ fun WebhooksScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedButton(
                         onClick = {
-                            if (newKey.isNotBlank() && newValue.isNotBlank()) {
-                                currentHeaders = currentHeaders + (newKey.trim() to newValue.trim())
+                            val trimmedKey = newKey.trim()
+                            val trimmedValue = newValue.trim()
+                            if (trimmedKey.isNotBlank() && trimmedValue.isNotBlank() && isValidHeaderName(trimmedKey)) {
+                                currentHeaders = currentHeaders + (trimmedKey to trimmedValue)
                                 newKey = ""
                                 newValue = ""
+                            } else if (trimmedKey.isNotBlank() && !isValidHeaderName(trimmedKey)) {
+                                Toast.makeText(context, "Invalid header name. Use only alphanumeric characters, hyphens, and underscores.", Toast.LENGTH_SHORT).show()
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -290,4 +297,30 @@ fun WebhooksScreen(
             }
         )
     }
+}
+
+/**
+ * Validates a webhook URL using proper URL parsing.
+ * Requires HTTPS scheme and a valid host with at least a domain.
+ */
+private fun isValidWebhookUrl(url: String): Boolean {
+    return try {
+        val parsed = URL(url)
+        parsed.protocol == "https" && !parsed.host.isNullOrBlank()
+    } catch (e: MalformedURLException) {
+        false
+    }
+}
+
+/**
+ * Validates HTTP header names per RFC 7230 (token characters).
+ * Allows alphanumeric, hyphens, underscores, and common token chars.
+ */
+private fun isValidHeaderName(name: String): Boolean {
+    if (name.isBlank()) return false
+    // RFC 7230 token = 1*tchar
+    // tchar = "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." /
+    //         "^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
+    val tokenPattern = Regex("^[A-Za-z0-9!#\$%&'*+\\-.^_`|~]+$")
+    return tokenPattern.matches(name)
 }
