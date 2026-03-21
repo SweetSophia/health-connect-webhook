@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Network security configuration to prevent cleartext (HTTP) traffic.
+   Health data should only be transmitted over encrypted HTTPS connections.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

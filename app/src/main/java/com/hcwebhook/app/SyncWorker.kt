@@ -1,6 +1,7 @@
 package com.hcwebhook.app
 
 import android.content.Context
+import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.Dispatchers
@@ -17,12 +18,26 @@ class SyncWorker(
         try {
             val syncResult = syncManager.performSync()
             when {
-                syncResult.isSuccess -> Result.success()
-                syncResult.isFailure -> Result.failure()
-                else -> Result.success() // No data case
+                syncResult.isSuccess -> {
+                    Log.d(TAG, "Sync completed successfully")
+                    Result.success()
+                }
+                syncResult.isFailure -> {
+                    Log.e(TAG, "Sync failed: ${syncResult.exceptionOrNull()?.message}")
+                    Result.failure()
+                }
+                else -> {
+                    Log.d(TAG, "Sync completed with no new data")
+                    Result.success()
+                }
             }
         } catch (e: Exception) {
+            Log.e(TAG, "Sync worker encountered an error", e)
             Result.failure()
         }
+    }
+
+    companion object {
+        private const val TAG = "SyncWorker"
     }
 }
