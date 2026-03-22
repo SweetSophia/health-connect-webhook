@@ -4,5 +4,7 @@
    Health data should only be transmitted over encrypted HTTPS connections.
 -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">100.111.85.48</domain>
+    </domain-config>
 </network-security-config>
