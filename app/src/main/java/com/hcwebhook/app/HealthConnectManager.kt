@@ -334,14 +334,54 @@ class HealthConnectManager(private val context: Context) {
     }
 
     private suspend fun readHeartRateData(startTime: Instant, endTime: Instant, lastSync: Instant?): List<HeartRateData> {
-        val request = ReadRecordsRequest(recordType = HeartRateRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
+        // HeartRateRecord is a series record: TimeRangeFilter.between() selects records
+        // based on record.startTime (not individual sample timestamps). If lastSync
+        // predates the default lookback window (startTime = now − 48 h), any
+        // HeartRateRecord whose session began before startTime is excluded from the
+        // query entirely — even when that session still contains samples newer than
+        // lastSync. Fix: expand the lower bound to cover such sessions. Cap the
+        // expansion at MAX_HR_LOOKBACK_DAYS to avoid unbounded back-fills.
+        val queryStart = if (lastSync != null && lastSync.isBefore(startTime)) {
+            maxOf(
+                lastSync.minus(HR_SESSION_BUFFER_HOURS, ChronoUnit.HOURS),
+                endTime.minus(MAX_HR_LOOKBACK_DAYS, ChronoUnit.DAYS)
+            )
+        } else {
+            startTime
+        }
+
+        android.util.Log.d(TAG,
+            "readHeartRateData: queryStart=$queryStart endTime=$endTime lastSync=$lastSync")
+
+        val request = ReadRecordsRequest(
+            recordType = HeartRateRecord::class,
+            timeRangeFilter = TimeRangeFilter.between(queryStart, endTime)
+        )
         val response = healthConnectClient.readRecords(request)
-        return response.records
+
+        android.util.Log.d(TAG,
+            "readHeartRateData: fetched ${response.records.size} records, " +
+            "totalSamples=${response.records.sumOf { it.samples.size }}")
+
+        // Use exclusive (>) filter so the exact boundary sample is not re-uploaded
+        // on every subsequent incremental sync.
+        val result = response.records
             .flatMap { record ->
                 record.samples
-                    .filter { lastSync == null || it.time >= lastSync }
+                    .filter { lastSync == null || it.time > lastSync }
                     .map { HeartRateData(it.beatsPerMinute, it.time) }
             }
+
+        if (result.isNotEmpty()) {
+            android.util.Log.d(TAG,
+                "readHeartRateData: ${result.size} samples after filter, " +
+                "first=${result.first().time} last=${result.last().time}")
+        } else {
+            android.util.Log.d(TAG,
+                "readHeartRateData: 0 samples after filter (lastSync=$lastSync)")
+        }
+
+        return result
     }
 
     private suspend fun readHeartRateVariabilityData(startTime: Instant, endTime: Instant, lastSync: Instant?): List<HeartRateVariabilityData> {
@@ -548,7 +588,16 @@ class HealthConnectManager(private val context: Context) {
     }
 
     companion object {
+        private const val TAG = "HealthConnectMgr"
         private const val LOOKBACK_HOURS = 48L
+
+        // HeartRateRecord is a series record. When expanding the query window for
+        // sessions that started before the default lookback, back up this many hours
+        // before lastSync to capture any session that was already in progress.
+        private const val HR_SESSION_BUFFER_HOURS = 24L
+
+        // Hard cap on how far back we will expand the HeartRateRecord query.
+        private const val MAX_HR_LOOKBACK_DAYS = 7L
 
         fun getPermissionsForTypes(types: Set<HealthDataType>): Set<String> {
             val permissions = types.map { HealthPermission.getReadPermission(it.recordClass) }.toMutableSet()
