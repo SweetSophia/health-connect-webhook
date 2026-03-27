@@ -335,20 +335,20 @@ class HealthConnectManager(private val context: Context) {
 
     private suspend fun readHeartRateData(startTime: Instant, endTime: Instant, lastSync: Instant?): List<HeartRateData> {
         // HeartRateRecord is a series record: TimeRangeFilter.between() selects records
-        // based on record.startTime (not individual sample timestamps). If lastSync
-        // predates the default lookback window (startTime = now − 48 h), any
-        // HeartRateRecord whose session began before startTime is excluded from the
-        // query entirely — even when that session still contains samples newer than
-        // lastSync. Fix: expand the lower bound to cover such sessions. Cap the
-        // expansion at MAX_HR_LOOKBACK_DAYS to avoid unbounded back-fills.
-        val queryStart = if (lastSync != null && lastSync.isBefore(startTime)) {
-            maxOf(
-                lastSync.minus(HR_SESSION_BUFFER_HOURS, ChronoUnit.HOURS),
-                endTime.minus(MAX_HR_LOOKBACK_DAYS, ChronoUnit.DAYS)
-            )
+        // based on record.startTime (not individual sample timestamps). That means we
+        // can miss newer samples when a long-running record started before the default
+        // lookback window. Use the earlier of the default startTime and a buffered
+        // lastSync marker, then cap the back-fill to MAX_HR_LOOKBACK_DAYS.
+        val bufferedLastSync = lastSync?.minus(HR_SESSION_BUFFER_HOURS, ChronoUnit.HOURS)
+        val desiredStart = if (bufferedLastSync != null) {
+            minOf(startTime, bufferedLastSync)
         } else {
             startTime
         }
+        val queryStart = maxOf(
+            desiredStart,
+            endTime.minus(MAX_HR_LOOKBACK_DAYS, ChronoUnit.DAYS)
+        )
 
         android.util.Log.d(TAG,
             "readHeartRateData: queryStart=$queryStart endTime=$endTime lastSync=$lastSync")
@@ -373,9 +373,11 @@ class HealthConnectManager(private val context: Context) {
             }
 
         if (result.isNotEmpty()) {
+            val firstSampleTime = result.minOfOrNull { it.time }
+            val lastSampleTime = result.maxOfOrNull { it.time }
             android.util.Log.d(TAG,
                 "readHeartRateData: ${result.size} samples after filter, " +
-                "first=${result.first().time} last=${result.last().time}")
+                "first=$firstSampleTime last=$lastSampleTime")
         } else {
             android.util.Log.d(TAG,
                 "readHeartRateData: 0 samples after filter (lastSync=$lastSync)")

@@ -78,13 +78,18 @@ class HeartRateSyncTest {
         lastSync: Instant?,
         bufferHours: Long = 24L,
         maxLookbackDays: Long = 7L,
-    ): Instant = if (lastSync != null && lastSync.isBefore(startTime)) {
-        maxOf(
-            lastSync.minus(bufferHours, ChronoUnit.HOURS),
+    ): Instant {
+        val bufferedLastSync = lastSync?.minus(bufferHours, ChronoUnit.HOURS)
+        val desiredStart = if (bufferedLastSync != null) {
+            minOf(startTime, bufferedLastSync)
+        } else {
+            startTime
+        }
+
+        return maxOf(
+            desiredStart,
             endTime.minus(maxLookbackDays, ChronoUnit.DAYS),
         )
-    } else {
-        startTime
     }
 
     @Test
@@ -118,18 +123,33 @@ class HeartRateSyncTest {
     }
 
     @Test
-    fun `queryStart stays at startTime when lastSync is within the lookback window`() {
+    fun `queryStart expands when buffered lastSync reaches before startTime`() {
         val endTime   = Instant.parse("2024-03-03T17:09:00Z")
         val startTime = endTime.minus(48, ChronoUnit.HOURS)
         val lastSync  = startTime.plus(1, ChronoUnit.HOURS)  // inside the window
 
         val queryStart = computeQueryStart(startTime, endTime, lastSync)
 
+        assertTrue(
+            "queryStart should expand when lastSync-buffer reaches before startTime",
+            queryStart.isBefore(startTime),
+        )
         assertEquals(
-            "queryStart must equal startTime when lastSync is within the lookback window",
-            startTime,
+            "queryStart should use the buffered lastSync value when it is earlier than startTime",
+            lastSync.minus(24, ChronoUnit.HOURS),
             queryStart,
         )
+    }
+
+    @Test
+    fun `queryStart stays at startTime when buffered lastSync remains inside window`() {
+        val endTime   = Instant.parse("2024-03-03T17:09:00Z")
+        val startTime = endTime.minus(48, ChronoUnit.HOURS)
+        val lastSync  = startTime.plus(30, ChronoUnit.HOURS)
+
+        val queryStart = computeQueryStart(startTime, endTime, lastSync)
+
+        assertEquals(startTime, queryStart)
     }
 
     @Test
