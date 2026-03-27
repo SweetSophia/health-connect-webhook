@@ -16,6 +16,10 @@ class SyncManager(private val context: Context) {
     private val preferencesManager = PreferencesManager(context)
     private val healthConnectManager = HealthConnectManager(context)
 
+    companion object {
+        private const val TAG = "SyncManager"
+    }
+
     suspend fun performSync(timeRangeDays: Int? = null): Result<SyncResult> = withContext(Dispatchers.IO) {
         try {
             val webhookConfigs = preferencesManager.getWebhookConfigs()
@@ -38,6 +42,10 @@ class SyncManager(private val context: Context) {
                 emptyMap()
             }
 
+            android.util.Log.d(TAG,
+                "performSync: mode=${if (timeRangeDays == null) "incremental" else "fullDay($timeRangeDays)"} " +
+                "lastSync[HEART_RATE]=${lastSyncTimestamps[HealthDataType.HEART_RATE]}")
+
             // Read health data
             val healthDataResult = healthConnectManager.readHealthData(enabledTypes, lastSyncTimestamps, timeRangeDays)
             if (healthDataResult.isFailure) {
@@ -45,6 +53,9 @@ class SyncManager(private val context: Context) {
             }
 
             val healthData = healthDataResult.getOrThrow()
+
+            android.util.Log.d(TAG,
+                "performSync: heartRate samples fetched=${healthData.heartRate.size}")
 
             // Check if there's any new data
             if (isHealthDataEmpty(healthData)) {
